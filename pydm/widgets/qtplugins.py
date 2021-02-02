@@ -4,7 +4,7 @@ logger = logging.getLogger(__name__)
 from .qtplugin_base import qtplugin_factory, WidgetCategory
 from .qtplugin_extensions import (RulesExtension, WaveformCurveEditorExtension,
                                   TimeCurveEditorExtension,
-                                  ScatterCurveEditorExtension)
+                                  ScatterCurveEditorExtension, AlarmTreeEditorExtension)
 from .tab_bar_qtplugin import TabWidgetPlugin
 from .byte import PyDMByteIndicator
 
@@ -36,7 +36,7 @@ from .timeplot import PyDMTimePlot
 from .waveformplot import PyDMWaveformPlot
 from .scatterplot import PyDMScatterPlot
 from .template_repeater import PyDMTemplateRepeater
-
+from .alarm_tree import PyDMAlarmTree
 
 BASE_EXTENSIONS = [RulesExtension]
 
@@ -191,3 +191,7 @@ PyDMTabWidgetPlugin = TabWidgetPlugin(extensions=BASE_EXTENSIONS)
 PyDMTemplateRepeaterPlugin = qtplugin_factory(PyDMTemplateRepeater,
                                              group=WidgetCategory.CONTAINER,
                                              extensions=BASE_EXTENSIONS)
+
+PyDMAlarmTreePlugin = qtplugin_factory(PyDMAlarmTree,
+                                         group=WidgetCategory.DISPLAY,
+                                         extensions=[AlarmTreeEditorExtension])

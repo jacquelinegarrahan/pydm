@@ -7,6 +7,7 @@ from ..widgets.rules_editor import RulesEditor
 from ..widgets.waveformplot_curve_editor import WaveformPlotCurveEditorDialog
 from ..widgets.timeplot_curve_editor import TimePlotCurveEditorDialog
 from ..widgets.scatterplot_curve_editor import ScatterPlotCurveEditorDialog
+from ..widgets.alarm_tree_editor import AlarmTreeEditorDialog
 
 
 class PyDMExtensionFactory(QExtensionFactory):
@@ -109,3 +110,24 @@ class TimeCurveEditorExtension(BasePlotExtension):
 class ScatterCurveEditorExtension(BasePlotExtension):
     def __init__(self, widget):
         super(ScatterCurveEditorExtension, self).__init__(widget, ScatterPlotCurveEditorDialog)
+
+
+class BaseTreeExtension(PyDMExtension):
+    def __init__(self, widget, alarm_tree_editor_class):
+        super(BaseTreeExtension, self).__init__(widget)
+        self.widget = widget
+        self.alarm_tree_editor_class = alarm_tree_editor_class
+        self.edit_alarm_tree_action = QtWidgets.QAction("Edit Alarm Tree...", self.widget)
+        self.edit_alarm_tree_action.triggered.connect(self.edit_alarm_tree)
+
+    def edit_alarm_tree(self, state):
+        edit_alarm_tree_dialog = self.alarm_tree_editor_class(self.widget, parent=self.widget)
+        edit_alarm_tree_dialog.exec()
+
+    def actions(self):
+        return [self.edit_alarm_tree_action]
+
+
+class AlarmTreeEditorExtension(BaseTreeExtension):
+    def __init__(self, widget):
+        super(AlarmTreeEditorExtension, self).__init__(widget, AlarmTreeEditorDialog)

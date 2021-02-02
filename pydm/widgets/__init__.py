@@ -23,3 +23,4 @@ from .waveformplot import PyDMWaveformPlot
 from .scatterplot import PyDMScatterPlot
 from .tab_bar import PyDMTabWidget
 from .template_repeater import PyDMTemplateRepeater
+from .alarm_tree import PyDMAlarmTree
