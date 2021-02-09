@@ -29,7 +29,9 @@ ALARMS = {
     "INVALID": 3,
     "DISCONNECTED": 4,
     "MINOR_ACK": 5,
-    "MAJOR_ACK": 6
+    "MAJOR_ACK": 6,
+    "UNDEFINED": 7,
+    "UNDEFINED_ACK": 8
 }
 
 
@@ -53,7 +55,7 @@ class Connection(PyDMConnection):
             self.consumer = KafkaConsumer(
                 alarm_configuration,
                 bootstrap_servers=[kafka_url],
-                enable_auto_commit=True,
+                enable_auto_commit=False,
                 key_deserializer=lambda x: x.decode('utf-8')
             )
 
