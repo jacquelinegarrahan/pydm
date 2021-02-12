@@ -14,27 +14,23 @@ class AlarmTreeItem(QObject):
     data_changed = Signal()
     send_value_signal = Signal(bool)
 
-    def __init__(self, data, parent=None, address=""):
+    def __init__(self, label="", parent=None, address="", description="", enabled=True, latching=False, annunciating=False, count=None, delay=None):
         super(AlarmTreeItem, self).__init__()
         self.parent_item = parent
 
-        if not data:
-            data=["NAN"]
-
-        self.item_data = data
         self.children = []
         self.channel = None
         self.address = address
         self._channels = []
         self._severity = None
 
-
-
-        self.description = ""
-        self.enabled = True
-        self.latching = False
-        self.count = None
-        self.delay = None
+        self.description = description
+        self.enabled = enabled
+        self.latching = latching
+        self.count = count
+        self.delay = delay
+        self.label = label
+        self.annunciating = annunciating
 
         if hasattr(self, "channels"):
             self.destroyed.connect(functools.partial(widget_destroyed,
@@ -45,45 +41,44 @@ class AlarmTreeItem(QObject):
     def child(self, row):
         return self.children[row] if len(self.children) > row else []
 
-    def childCount(self):
+    def child_count(self):
         return len(self.children)
 
-    def childNumber(self):
+    def child_number(self):
         if self.parent_item != None:
             return self.parent_item.children.index(self)
         return 0
 
-    def columnCount(self):
-        return len(self.item_data)
+    def column_count(self):
+        return 1
 
-    def data(self, column):
-        return self.item_data[column]
-
-    def createChild(self, position, child_data=None):
+    def create_child(self, position, child_data=None):
         child = AlarmTreeItem.from_dict(child_data, parent=self)
         self.children.insert(position, child)
         return child
 
-    def insertChild(self, position, child):
+    def insert_child(self, position, child):
         self.children.insert(position, child)
         return child
 
     def parent(self):
         return self.parent_item
 
-    def removeChildren(self, position):
+    def remove_child(self, position):
         item = self.children.pop(position)
 
         return item
     
-    def assignParent(self, parent):
+    def assign_parent(self, parent):
         self.parent_item = parent
 
+    @property
+    def label(self):
+        return self._label
 
-    # data
-    def set_label(self, value):
-        self.item_data = [value]
-        return True
+    @label.setter
+    def label(self, label):
+        self._label = label
 
     @property
     def address(self):
@@ -104,6 +99,7 @@ class AlarmTreeItem(QObject):
                                    severity_slot=self.receiveNewSeverity,
                                    value_signal=self.send_value_signal,
                                    )
+
 
     @property
     def description(self):
@@ -134,15 +130,7 @@ class AlarmTreeItem(QObject):
         return self._annunciating
 
     @annunciating.setter
-    def latching(self, annunciating):
-        self._annunciating = annunciating
-
-    @property
-    def annunciating(self):
-        return self._annunciating
-
-    @annunciating.setter
-    def latching(self, annunciating):
+    def annunciating(self, annunciating):
         self._annunciating = annunciating
 
     @property
@@ -162,14 +150,13 @@ class AlarmTreeItem(QObject):
         self._count = count
 
 
-
     @property
-    def filter(self):
+    def alarm_filter(self):
         return self._filter
 
-    @annunciating.setter
-    def filter(self, filter):
-        self._filter = filter
+    @alarm_filter.setter
+    def alarm_filter(self, alarm_filter):
+        self._filter = alarm_filter
 
     # command
 
@@ -200,19 +187,30 @@ class AlarmTreeItem(QObject):
 
     # For recreation    
     def to_dict(self):
-        return {"data": self.item_data, "address": self.address}
+        return {"label": self.label, "address": self.address, 
+        "description": self.description, "enabled": self.enabled, 
+        "latching": self.latching, "count": self.count, 
+        "annunciating": self.annunciating,
+        "delay": self.delay}
 
     @classmethod
     def from_dict(cls, data_map, parent=None):
         if data_map:
-            data = data_map.get("data")
+            label = data_map.get("label")
             address = data_map.get("address")
+            description = data_map.get("description")
+            enabled = data_map.get("enabled")
+            latching = data_map.get("latching")
+            count = data_map.get("count")
+            delay = data_map.get("delay")
+            annunciating = data_map.get("annunciating")
+
+            return cls(label, parent=parent, address=address, description=description, enabled=enabled, latching=latching, annunciating=annunciating, count=count, delay=delay)
 
         else:
-            data = None
-            address = None
+            return cls(None, parent=parent)
 
-        return cls(data, parent=parent, address=address)
+
 
 
 
@@ -221,7 +219,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         super(AlarmTreeModel, self).__init__(parent)
         self._nodes = []
         self._tree = tree
-        self._root_item = AlarmTreeItem([self._tree.config_name])
+        self._root_item = AlarmTreeItem(self._tree.config_name)
         self._nodes.append(self._root_item)
 
     def clear(self):
@@ -229,12 +227,12 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         self._root_item = None
 
     def columnCount(self, parent=QtCore.QModelIndex()):
-        return self._root_item.columnCount()
+        return self._root_item.column_count()
 
     def rowCount(self, parent=QtCore.QModelIndex()):
         parent = self.getItem(parent)
 
-        return parent.childCount()
+        return parent.child_count()
 
 
     def data(self, index, role):
@@ -244,7 +242,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         item = self.getItem(index)
         
         if role in [QtCore.Qt.DisplayRole, QtCore.Qt.EditRole]:
-            return item.data(0)
+            return item.label
 
         if role == QtCore.Qt.TextColorRole:
 
@@ -320,7 +318,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
         parent_item = self.getItem(parent)
         self.beginInsertRows(parent, position, position)
-        child = parent_item.createChild(position, child_data=child_data)
+        child = parent_item.create_child(position, child_data=child_data)
         child.data_changed.connect(self.update_values)
         self.addNode(child)
         self.endInsertRows()
@@ -333,7 +331,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         parent_item = self.getItem(parent)
 
         self.beginRemoveRows(parent, position, position)
-        item = parent_item.removeChildren(position)
+        item = parent_item.remove_child(position)
         self.removeNode(item)
 
         # disconnect
@@ -356,26 +354,52 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         if parent == self._root_item:
             return QtCore.QModelIndex()
 
-        return self.createIndex(parent.childNumber(), 0, parent)
+        return self.createIndex(parent.child_number(), 0, parent)
 
 
+    def setData(self, index, data, role):
+        """
+        QAbstractModel uses setData for double click line edits.
+        """
+        if data:
+            self.set_data(index, label=data)
 
-    def set_data(self, index, label=None, role=QtCore.Qt.EditRole, address=None):
+        return True
+
+
+    def set_data(self, index, role=QtCore.Qt.EditRole, label=None, description=None, address=None, count=None, delay=None, latching=None, enabled=None, annunciating=None):
         if role != QtCore.Qt.EditRole:
             return False
 
         item = self.getItem(index)
 
-        if value: 
-            result = item.set_label(label)
+        if label: 
+            item.label = label
 
         if address:
             item.address = address
 
-        if result:
-            self.dataChanged.emit(index, index)
+        if count:
+           item.count = count
 
-        return result
+        if delay:
+            item.delay = delay
+
+        if latching is not None:
+            item.latching = latching
+
+        if enabled is not None:
+            item.enabled = enabled
+
+        if annunciating is not None:
+            item.annunciating = annunciating
+
+        if description:
+            item.description = description
+
+        self.dataChanged.emit(index, index)
+
+        return True
 
 
 
@@ -452,6 +476,9 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         """
         Accepts a list of node representations in the list format [dictionary representation, parent]
         """
+        self.clear()
+        # trigger layout changed signal
+
         for i, node in enumerate(hierarchy):
             node_data = node[0]
             parent_idx = node[1]
@@ -460,8 +487,8 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
             self._nodes.append(alarm_item)
 
             if parent_idx is not None:
-                alarm_item.assignParent(self._nodes[node[1]])
-                self._nodes[node[1]].insertChild(-1, alarm_item)
+                alarm_item.assign_parent(self._nodes[node[1]])
+                self._nodes[node[1]].insert_child(-1, alarm_item)
             
 
             if i == 0:
@@ -471,6 +498,10 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
             node.data_changed.connect(self.update_values)
             if node.channel is not None:
                 node.channel.connect()
+
+        # trigger layout changed signal
+        self.update_values()
+
 
 
     # configuration handling
@@ -536,9 +567,6 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
                 rep = [data, parent_idx]
                 hierarchy.append(rep)
 
-        # Reset
-        self.clear()
+        # import
         self.import_hierarchy(hierarchy)
 
-        # trigger layout changed signal
-        self.update_values()
