@@ -1,6 +1,7 @@
 from kafka import KafkaConsumer, KafkaProducer
 from threading import Thread, Event
-from queue import LifoQueue
+from six.moves.queue import LifoQueue
+#from queue import LifoQueue
 import json
 import requests
 import time
@@ -42,6 +43,7 @@ class Connection(PyDMConnection):
     """
 
     def __init__(self, channel, address, protocol=None, parent=None):
+        # type: (channel: _, address: str, protocal: str, parent: _)
         super(Connection, self).__init__(channel, address, protocol, parent)
         self.address = address
         self._update_queue = LifoQueue(maxsize=1)
@@ -88,12 +90,12 @@ class Connection(PyDMConnection):
             if self._exit_event.is_set():
                 break
 
-            if message.key == f"state:/{self.address}":
+            if message.key == "state:/{}".format(self.address):
                 value = json.loads(message.value.decode("utf-8"))
                 self.send_new_severity(value["severity"])
 
-                if value.get("value"):
-                    self.send_new_value(value["value"])
+                if value.get("message"):
+                    self.send_new_value(value["message"])
 
     def close(self):
         self._exit_event.set()
@@ -115,10 +117,10 @@ class Connection(PyDMConnection):
         channel.value_signal[bool].connect(self.put_value, Qt.QueuedConnection)
 
     def acknowledge(self):
-        self.producer.send(self._configuration, key = f"command:/{self.address}", value={"user": "pydm", "host": "", "command": "acknowledge"})
+        self.producer.send(self._configuration, key = "command:/{}".format(self.address), value={"user": "pydm", "host": "", "command": "acknowledge"})
 
     def unacknowledge(self):
-        self.producer.send(self._configuration, key = f"command:/{self.address}", value={"user": "pydm", "host": "", "command": "unacknowledge"})
+        self.producer.send(self._configuration, key = "command:/{}".format(self.address), value={"user": "pydm", "host": "", "command": "unacknowledge"})
 
     def disable(self):
         pass
