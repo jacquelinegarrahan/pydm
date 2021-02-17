@@ -48,10 +48,10 @@ class Connection(PyDMConnection):
         self.address = address
         self._update_queue = LifoQueue(maxsize=1)
         self._exit_event = Event()
-        self._configuration = os.getenv("ALARM_CONFIGURATION")
+        self._configuration = channel.alarm_configuration
 
         kafka_url = os.getenv("KAFKA_URL")
-        alarm_configuration = os.getenv("ALARM_CONFIGURATION")
+        alarm_configuration = channel.alarm_configuration
 
         try:
             self.consumer = KafkaConsumer(

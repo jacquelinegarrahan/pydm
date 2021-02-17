@@ -14,9 +14,10 @@ class AlarmTreeItem(QObject):
     data_changed = Signal()
     send_value_signal = Signal(bool)
 
-    def __init__(self, label="", parent=None, address="", description="", enabled=True, latching=False, annunciating=False, count=None, delay=None, is_group=False, alarm_filter=None):
-        # type: (str, QObject, str, str, bool, bool, bool, int, int, bool, str)
+    def __init__(self, label="", parent=None, address="", description="", enabled=True, latching=False, annunciating=False, count=None, delay=None, is_group=False, alarm_filter=None, alarm_configuration=None):
+        # type: (str, QObject, str, str, bool, bool, bool, int, int, bool, str, str)
         super(AlarmTreeItem, self).__init__()
+        self.alarm_configuration = alarm_configuration
         self.parent_item = parent
 
         self.children = []
@@ -59,7 +60,7 @@ class AlarmTreeItem(QObject):
 
     def create_child(self, position, child_data):
         # type: (int, dict)
-        child = AlarmTreeItem.from_dict(child_data, parent=self)
+        child = AlarmTreeItem.from_dict(child_data, parent=self, alarm_configuration = self._tree.config_name)
         self.children.insert(position, child)
         if not self.is_group:
             self.is_group = True
@@ -113,6 +114,7 @@ class AlarmTreeItem(QObject):
                                    value_slot=self.receiveNewValue,
                                    severity_slot=self.receiveNewSeverity,
                                    value_signal=self.send_value_signal,
+                                   alarm_configuration=self.alarm_configuration
                                    )
 
 
@@ -219,7 +221,7 @@ class AlarmTreeItem(QObject):
         "delay": self.delay, "alarm_filter": self.alarm_filter}
 
     @classmethod
-    def from_dict(cls, data_map, parent=None):
+    def from_dict(cls, data_map, parent=None, alarm_configuration=None):
         # type: (dict, QObject)
         if data_map:
             label = data_map.get("label")
@@ -232,7 +234,7 @@ class AlarmTreeItem(QObject):
             annunciating = data_map.get("annunciating")
             alarm_filter = data_map.get("alarm_filter")
 
-            return cls(label, parent=parent, address=address, description=description, enabled=enabled, latching=latching, annunciating=annunciating, count=count, delay=delay, alarm_filter=alarm_filter)
+            return cls(label, parent=parent, address=address, description=description, enabled=enabled, latching=latching, annunciating=annunciating, count=count, delay=delay, alarm_filter=alarm_filter, alarm_configuration=alarm_configuration)
 
         else:
             return cls(None, parent=parent)
@@ -574,11 +576,13 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         self.clear()
         # trigger layout changed signal
 
+        config_name = None
+
         for i, node in enumerate(hierarchy):
             node_data = node[0]
             parent_idx = node[1]
 
-            alarm_item = AlarmTreeItem.from_dict(node[0])
+            alarm_item = AlarmTreeItem.from_dict(node[0], alarm_configuration = config_name)
             self._nodes.append(alarm_item)
 
             if parent_idx is not None:
@@ -588,6 +592,8 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
             if i == 0:
                 self._root_item = alarm_item
+                self._tree.config_name = alarm_item.label
+                config_name = alarm_item.label
 
         for node in self._nodes:
             node.data_changed.connect(self.update_values)
