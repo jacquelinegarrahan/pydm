@@ -60,7 +60,7 @@ class AlarmTreeItem(QObject):
 
     def create_child(self, position, child_data):
         # type: (int, dict)
-        child = AlarmTreeItem.from_dict(child_data, parent=self, alarm_configuration = self._tree.config_name)
+        child = AlarmTreeItem.from_dict(child_data, parent=self, alarm_configuration = self.alarm_configuration)
         self.children.insert(position, child)
         if not self.is_group:
             self.is_group = True

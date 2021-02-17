@@ -82,7 +82,7 @@ class PyDMChannel(object):
                  severity_slot=None, write_access_slot=None,
                  enum_strings_slot=None, unit_slot=None, prec_slot=None,
                  upper_ctrl_limit_slot=None, lower_ctrl_limit_slot=None,
-                 value_signal=None):
+                 value_signal=None, alarm_configuration=None):
         self._address = None
         self.address = address
 
@@ -98,6 +98,8 @@ class PyDMChannel(object):
         self.lower_ctrl_limit_slot = lower_ctrl_limit_slot
 
         self.value_signal = value_signal
+
+        self.alarm_configuration=alarm_configuration
 
     @property
     def address(self):
