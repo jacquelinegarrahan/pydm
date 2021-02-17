@@ -627,7 +627,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         start = time.time() * 1000
         last_time = -100000
         while last_time < start:
-            message = consumer.poll()
+            message = consumer.poll(100)
             for topic_partition in message:
                 for record in message[topic_partition]:
                     last_time = record.timestamp
@@ -645,6 +645,9 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
                             else:
                                 keys[len(key_split)].append({"key_path": key_path, "key_split": key_split})
+
+            if not message:
+                break
 
 
         nodes = []                    
