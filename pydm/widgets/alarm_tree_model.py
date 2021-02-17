@@ -14,7 +14,8 @@ class AlarmTreeItem(QObject):
     data_changed = Signal()
     send_value_signal = Signal(bool)
 
-    def __init__(self, label="", parent=None, address="", description="", enabled=True, latching=False, annunciating=False, count=None, delay=None):
+    def __init__(self, label="", parent=None, address="", description="", enabled=True, latching=False, annunciating=False, count=None, delay=None, is_group=False, alarm_filter=None):
+        # type: (str, QObject, str, str, bool, bool, bool, int, int, bool, str)
         super(AlarmTreeItem, self).__init__()
         self.parent_item = parent
 
@@ -22,7 +23,8 @@ class AlarmTreeItem(QObject):
         self.channel = None
         self.address = address
         self._channels = []
-        self._severity = None
+        self.severity = None
+        self.status = None
 
         self.description = description
         self.enabled = enabled
@@ -31,6 +33,8 @@ class AlarmTreeItem(QObject):
         self.delay = delay
         self.label = label
         self.annunciating = annunciating
+        self.alarm_filter=alarm_filter
+        self.is_group = is_group
 
         if hasattr(self, "channels"):
             self.destroyed.connect(functools.partial(widget_destroyed,
@@ -39,6 +43,7 @@ class AlarmTreeItem(QObject):
 
     # For model logic
     def child(self, row):
+        """# type: (row: int)"""
         return self.children[row] if len(self.children) > row else []
 
     def child_count(self):
@@ -52,24 +57,33 @@ class AlarmTreeItem(QObject):
     def column_count(self):
         return 1
 
-    def create_child(self, position, child_data=None):
+    def create_child(self, position, child_data):
+        # type: (int, dict)
         child = AlarmTreeItem.from_dict(child_data, parent=self)
         self.children.insert(position, child)
+        if not self.is_group:
+            self.is_group = True
+
         return child
 
     def insert_child(self, position, child):
+        # type: (int, QObject)
         self.children.insert(position, child)
+        if not self.is_group:
+            self.is_group=True
         return child
 
     def parent(self):
         return self.parent_item
 
     def remove_child(self, position):
+        # type: (int)
         item = self.children.pop(position)
 
         return item
     
     def assign_parent(self, parent):
+        # type: (QObject)
         self.parent_item = parent
 
     @property
@@ -88,6 +102,7 @@ class AlarmTreeItem(QObject):
 
     @address.setter
     def address(self, new_address):
+        # type: (str)
         self._address = new_address
         if new_address is None or len(str(new_address)) < 1:
             self.channel = None
@@ -107,6 +122,7 @@ class AlarmTreeItem(QObject):
 
     @description.setter
     def description(self, description):
+        # type: (str)
         self._description = description
 
     @property
@@ -115,6 +131,7 @@ class AlarmTreeItem(QObject):
 
     @enabled.setter
     def enabled(self, enabled):
+        # type: (bool)
         self._enabled = enabled
     
     @property
@@ -123,6 +140,7 @@ class AlarmTreeItem(QObject):
 
     @latching.setter
     def latching(self, latching):
+        # type: (bool)
         self._latching = latching
 
     @property
@@ -131,6 +149,7 @@ class AlarmTreeItem(QObject):
 
     @annunciating.setter
     def annunciating(self, annunciating):
+        # type: (bool)
         self._annunciating = annunciating
 
     @property
@@ -139,6 +158,7 @@ class AlarmTreeItem(QObject):
 
     @delay.setter
     def delay(self, delay):
+        # type: (int)
         self._delay = delay
 
     @property
@@ -147,6 +167,7 @@ class AlarmTreeItem(QObject):
 
     @count.setter
     def count(self, count):
+        # type: (int)
         self._count = count
 
 
@@ -156,6 +177,7 @@ class AlarmTreeItem(QObject):
 
     @alarm_filter.setter
     def alarm_filter(self, alarm_filter):
+        # type: (str)
         self._filter = alarm_filter
 
     # command
@@ -165,15 +187,19 @@ class AlarmTreeItem(QObject):
     # Update functions
     @Slot(int)
     def receiveNewSeverity(self, new_severity):
-        self._severity = new_severity
+        # type: (int)
+        self.severity = new_severity
         self.data_changed.emit()
 
     @Slot(str)
     def receiveNewValue(self, new_value):
+        # type: (str)
+        self.status = new_value
         self.data_changed.emit()
 
     @Slot(bool)
     def connectionStateChanged(self, connected):
+        # type: (bool)
         pass
 
     @Slot(bool)
@@ -184,17 +210,17 @@ class AlarmTreeItem(QObject):
     def unacknowledge(self):
         self.send_value_signal.emit(False)
 
-
     # For recreation    
     def to_dict(self):
         return {"label": self.label, "address": self.address, 
         "description": self.description, "enabled": self.enabled, 
         "latching": self.latching, "count": self.count, 
         "annunciating": self.annunciating,
-        "delay": self.delay}
+        "delay": self.delay, "alarm_filter": self.alarm_filter}
 
     @classmethod
     def from_dict(cls, data_map, parent=None):
+        # type: (dict, QObject)
         if data_map:
             label = data_map.get("label")
             address = data_map.get("address")
@@ -204,12 +230,19 @@ class AlarmTreeItem(QObject):
             count = data_map.get("count")
             delay = data_map.get("delay")
             annunciating = data_map.get("annunciating")
+            alarm_filter = data_map.get("alarm_filter")
 
-            return cls(label, parent=parent, address=address, description=description, enabled=enabled, latching=latching, annunciating=annunciating, count=count, delay=delay)
+            return cls(label, parent=parent, address=address, description=description, enabled=enabled, latching=latching, annunciating=annunciating, count=count, delay=delay, alarm_filter=alarm_filter)
 
         else:
             return cls(None, parent=parent)
 
+    # distinguish groups/pvs
+    def mark_group(self):
+        self.is_group = True
+
+    def mark_pv(self):
+        self.is_group = False
 
 
 
@@ -227,15 +260,18 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         self._root_item = None
 
     def columnCount(self, parent=QtCore.QModelIndex()):
+        # type: (QtCore.QModelIndex)
         return self._root_item.column_count()
 
     def rowCount(self, parent=QtCore.QModelIndex()):
+        # type: (QtCore.QModelIndex)
         parent = self.getItem(parent)
 
         return parent.child_count()
 
 
     def data(self, index, role):
+        # type: (QModelIndex, Qt.ItemDataRole)
         if not index.isValid():
             return None
 
@@ -247,43 +283,44 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         if role == QtCore.Qt.TextColorRole:
 
             # no alarm
-            if item._severity == 0:
+            if item.severity == 0:
                 return QBrush(QtCore.Qt.green)
 
             # minor alarm
-            elif item._severity == 1:
+            elif item.severity == 1:
                 return QBrush(QColor(250, 199, 0))
 
             # major alarm
-            elif item._severity == 2: 
+            elif item.severity == 2: 
                 return QBrush(QtCore.Qt.red)
 
             # invalid
-            elif item._severity == 3:
+            elif item.severity == 3:
                 return QBrush(GtGui.QColor(102, 0, 255))
 
             # disconnected
-            elif item._severity == 4:
+            elif item.severity == 4:
                 return QBrush(QtCore.Qt.black)
 
             # major/minor ack
-            elif item._severity == 5:
+            elif item.severity == 5:
                 return QBrush(QColor(86, 86, 86))
 
             # major/minor ack
-            elif item._severity == 6:
+            elif item.severity == 6:
                 return QBrush(QColor(86, 86, 86))
             
             # undefined
-            elif item._severity == 7:
+            elif item.severity == 7:
                 return QBrush(QtCore.Qt.black)
 
             #undefined ack
-            elif item._severity == 8:
+            elif item.severity == 8:
                 return QBrush(QColor(86, 86, 86))
 
 
     def flags(self, index):
+        # type: (QtCore.QModelIndex)
         if not index.isValid():
             return QtCore.Qt.ItemIsEnabled
 
@@ -291,6 +328,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
 
     def getItem(self, index):
+        # type: (QtCore.QModelIndex)
         if index.isValid():
             item = index.internalPointer()
             if item:
@@ -300,7 +338,8 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
             return self._root_item
 
 
-    def index(self, row, column, parent=QtCore.QModelIndex()):
+    def index(self, row, column, parent =QtCore.QModelIndex()):
+        # type: (int, int, QtCore.QModelIndex)
         if parent.isValid() and parent.column() != 0:
             return QtCore.QModelIndex()
 
@@ -313,13 +352,21 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
 
     def insertRow(self, position, parent=QtCore.QModelIndex(), child_data=None):
+        # type: (int, QtCore.QModelIndex, dict)
         if not parent:
             return False
 
+
         parent_item = self.getItem(parent)
+
         self.beginInsertRows(parent, position, position)
         child = parent_item.create_child(position, child_data=child_data)
         child.data_changed.connect(self.update_values)
+
+        if not parent_item.is_group:
+            parent_item.mark_group()
+
+
         self.addNode(child)
         self.endInsertRows()
 
@@ -327,12 +374,17 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
     
 
-    def removeRow(self, position, parent=QtCore.QModelIndex()):
+    def removeRow(self, position, parent= QtCore.QModelIndex()):
+        # type: (int, QtCore.QModelIndex)
+
         parent_item = self.getItem(parent)
 
         self.beginRemoveRows(parent, position, position)
         item = parent_item.remove_child(position)
         self.removeNode(item)
+
+        if not parent_item.child_count():
+            parent_item.mark_pv()
 
         # disconnect
         item.data_changed.disconnect(self.update_values)
@@ -342,6 +394,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
 
     def parent(self, index):
+        # type: (QModelIndex)
         if not index.isValid():
             return QtCore.QModelIndex()
 
@@ -358,6 +411,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
 
     def setData(self, index, data, role):
+        # type: (QModelIndex, str, Qt.ItemDataRole)
         """
         QAbstractModel uses setData for double click line edits.
         """
@@ -367,7 +421,8 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         return True
 
 
-    def set_data(self, index, role=QtCore.Qt.EditRole, label=None, description=None, address=None, count=None, delay=None, latching=None, enabled=None, annunciating=None):
+    def set_data(self, index, role=QtCore.Qt.EditRole, label=None, description=None, address=None, count=None, delay=None, latching=None, enabled=None, annunciating=None, alarm_filter=None):
+        # type: (QModelIndex, Qt.ItemDataRole, str, str, str, int, int, bool, bool, bool, str)
         if role != QtCore.Qt.EditRole:
             return False
 
@@ -397,6 +452,9 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         if description:
             item.description = description
 
+        if alarm_filter:
+            item.alarm_filter = alarm_filter
+
         self.dataChanged.emit(index, index)
 
         return True
@@ -409,7 +467,6 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
 
     # drag/drop
-
     def supportedDropActions(self):
         return Qt.MoveAction
 
@@ -417,38 +474,75 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         return ['text/plain']
 
     def mimeData(self, indexes):
+        # type: (List[QModelIndex])
+        """Function used for preparing tree data for drag+drop. Preserves the hierarchy of the dropped item.
+
+        """
         mimedata = QtCore.QMimeData()
         item = self.getItem(indexes[0])
 
-        if self.hasChildren(indexes[0]):
-            print("HAS CHILDREN... HANDLE!")
+        # track representations and hierarchal relationships
+        hierarchy_builder = MimeHierarchyTool()
+        hierarchy_rep = hierarchy_builder.build_config(item)
 
 
-        data = json.dumps(item.to_dict())
+        data = json.dumps(hierarchy_rep)
         mimedata.setText(data)
         return mimedata
 
 
     def dropMimeData(self, mimedata, action, row, column, parentIndex):
+        """Function used for dropping tree items. Item hierarchy within dragged groups is preserved. 
 
+        """
         if action == Qt.IgnoreAction: return True
-
-        dropped_data = json.loads(mimedata.text())
 
         prior_index = self._tree.selectionModel().currentIndex()
         selected_parent = self.parent(prior_index)
         selected_row = prior_index.row()
 
         self.removeRow(selected_row, parent=selected_parent)
-        self.insertRow(row, parent=parentIndex, child_data=dropped_data)
 
+        dropped_data = json.loads(mimedata.text())
+
+        # handle items
+        new_nodes = []
+        parent_item = self.getItem(parentIndex)
+        for i, rep in enumerate(dropped_data):
+            data_rep = rep[0]
+            parent_idx = rep[1]
+
+            if i == 0:
+                base_insert = parent_item.create_child(0, child_data=data_rep)
+                base_insert.data_changed.connect(self.update_values)
+                self._nodes.append(base_insert)
+                
+                # track for local indices
+                new_nodes.append(base_insert)
+
+            else:
+                # get nodes parent
+                parent_node = new_nodes[parent_idx]
+                new_node = parent_node.create_child(0, child_data=data_rep)
+                new_node.data_changed.connect(self.update_values)
+                self._nodes.append(new_node)
+                # track for local indices
+                new_nodes.append(new_node)
+
+
+        # trigger layout changed signal
+        self.update_values()
+
+        # populate children
         return True
 
 
     def addNode(self, item):
+        # type: (AlarmTreeItem) 
         self._nodes.append(item)
     
     def removeNode(self, node):
+        # type: (AlarmTreeItem) 
         self._nodes.remove(node)
         if len(self._nodes) < 1:
             pass
@@ -473,6 +567,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         return json.dumps(hierarchy)
 
     def import_hierarchy(self, hierarchy):
+        # type: (List[list])
         """
         Accepts a list of node representations in the list format [dictionary representation, parent]
         """
@@ -553,7 +648,7 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
         for depth in range(1, max_depth + 1):
             
             for key in keys[depth]:
-                data = {"data": [key["key_split"][-1]], "address": f"alarm://{key['key_path']}"}
+                data = {"label": key["key_split"][-1], "address": "alarm://{}".format(key["key_path"])}
 
                 nodes.append(key["key_path"])
 
@@ -569,4 +664,61 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
         # import
         self.import_hierarchy(hierarchy)
+
+
+class MimeHierarchyTool:
+    """Tool for constructing tree hierarchies for drag and drop transfers
+
+    """
+
+    def __init__(self):
+        self.hierarchy = []
+    
+    def build_config(self, node):
+        """Governing logic for building/organizing the hierarchy.
+
+        """
+        # index, parent
+        self.hierarchy.append([node.to_dict(), None])
+
+        for node in node.children:
+            
+            #if children, is a group
+            if node.child_count():
+                self._handle_group_add(node, 0)
+
+            else:
+                self._handle_pv_add(node, 0)
+
+        return self.hierarchy
+
+
+    def _handle_group_add(self, group, parent_index):
+        # type: (AlarmTreeItem, QModelIndex)
+        """Handles group additions to hierarchy and their subsequent children.
+
+        """
+        node_index = len(self.hierarchy)-1
+
+        self.hierarchy.append([group.to_dict(), parent_index])
+
+        # don't add properties for group
+        for child in group.children:
+
+            if child.child_count():
+                self._handle_group_add(child, node_index)
+
+            else:
+                self._handle_pv_add(child, node_index)
+
+
+    def _handle_pv_add(self, pv, parent_index):
+        # type: (AlarmTreeItem, QModelIndex)
+        """Handles pv additions to hierarchy.
+
+        """
+        node_index = len(self.hierarchy)-1
+        self.hierarchy.append([pv.to_dict(), parent_index])
+
+
 
