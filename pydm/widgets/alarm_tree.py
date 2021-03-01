@@ -28,6 +28,7 @@ class PyDMAlarmTree(QTreeView, PyDMWritableWidget):
 
         self.tree_model = AlarmTreeModel(self)
         self.setModel(self.tree_model)
+        self.edit_mode = edit_mode
 
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         
@@ -53,7 +54,7 @@ class PyDMAlarmTree(QTreeView, PyDMWritableWidget):
 
     def set_configuration_name(self, config_name):
         self.config_name = config_name
-        if not utilities.is_qt_designer():
+        if not utilities.is_qt_designer() and not self.edit_mode:
             if self.config_name:
                 self.tree_model.import_configuration_from_kafka(self.config_name)
 
