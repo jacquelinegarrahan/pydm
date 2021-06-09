@@ -4,15 +4,17 @@ from qtpy.QtGui import QBrush, QColor
 import os 
 from kafka import KafkaConsumer
 from .channel import PyDMChannel
+from pydm.widgets.base import widget_destroyed
 import time
 import json
 from copy import deepcopy
-
+import functools
 
 
 class AlarmTreeItem(QObject):
     data_changed = Signal()
     send_value_signal = Signal(bool)
+    send_enable_signal = Signal(bool)
 
     def __init__(self, label="", parent=None, address="", description="", enabled=True, latching=False, annunciating=False, count=None, delay=None, is_group=False, alarm_filter=None, alarm_configuration=None):
         # type: (str, QObject, str, str, bool, bool, bool, int, int, bool, str, str)
@@ -36,10 +38,19 @@ class AlarmTreeItem(QObject):
         self.annunciating = annunciating
         self.alarm_filter=alarm_filter
         self.is_group = is_group
+        self.tickets = ""
 
         if hasattr(self, "channels"):
             self.destroyed.connect(functools.partial(widget_destroyed,
                                                      self.channels))
+
+
+        #state rep
+        self.severity_message = ""
+        self.last_state = {}
+        self.acknowledged = False
+        self.value = None
+        self.enabled = True
 
 
     # For model logic
@@ -113,8 +124,10 @@ class AlarmTreeItem(QObject):
                                    connection_slot=self.connectionStateChanged,
                                    value_slot=self.receiveNewValue,
                                    severity_slot=self.receiveNewSeverity,
+                                   enable_slot=self.receiveNewEnabled,
                                    value_signal=self.send_value_signal,
-                                   alarm_configuration=self.alarm_configuration
+                                   alarm_configuration=self.alarm_configuration,
+                                   enable_signal=self.send_enable_signal
                                    )
 
 
@@ -188,6 +201,14 @@ class AlarmTreeItem(QObject):
 
     # Update functions
     @Slot(int)
+    def receiveNewEnabled(self, enabled):
+        # type: (bool)
+        self.enabled = enabled
+        self.data_changed.emit()
+
+
+    # Update functions
+    @Slot(int)
     def receiveNewSeverity(self, new_severity):
         # type: (int)
         self.severity = new_severity
@@ -196,7 +217,20 @@ class AlarmTreeItem(QObject):
     @Slot(str)
     def receiveNewValue(self, new_value):
         # type: (str)
-        self.status = new_value
+        rep = json.loads(new_value)
+        print(rep)
+        self.last_state = rep
+        self.status = rep["message"]
+        self.severity_message = rep["severity"]
+        self.value = rep["value"]
+
+
+        if "ACK" in  rep["severity"]:
+            self.acknowledged = True
+        else:
+            self.acknowledged = False
+
+
         self.data_changed.emit()
 
     @Slot(bool)
@@ -212,7 +246,15 @@ class AlarmTreeItem(QObject):
     def unacknowledge(self):
         self.send_value_signal.emit(False)
 
-    # For recreation    
+    @Slot(bool)
+    def enable(self):
+        self.send_enable_signal.emit(True)
+
+    @Slot(bool)
+    def disable(self):
+        self.send_enable_signal.emit(False)
+
+    # For re-creation    
     def to_dict(self):
         return {"label": self.label, "address": self.address, 
         "description": self.description, "enabled": self.enabled, 
@@ -286,11 +328,11 @@ class AlarmTreeModel(QtCore.QAbstractItemModel):
 
             # no alarm
             if item.severity == 0:
-                return QBrush(QtCore.Qt.green)
+                return QBrush(QtCore.Qt.black)
 
             # minor alarm
             elif item.severity == 1:
-                return QBrush(QColor(250, 199, 0))
+                return QBrush(QtCore.Qt.yellow)
 
             # major alarm
             elif item.severity == 2: 
@@ -728,6 +770,3 @@ class MimeHierarchyTool:
         """
         node_index = len(self.hierarchy)-1
         self.hierarchy.append([pv.to_dict(), parent_index])
-
-
-

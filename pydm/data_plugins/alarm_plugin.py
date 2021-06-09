@@ -51,11 +51,10 @@ class Connection(PyDMConnection):
         self._configuration = channel.alarm_configuration
 
         kafka_url = os.getenv("KAFKA_URL")
-        alarm_configuration = channel.alarm_configuration
 
         try:
             self.consumer = KafkaConsumer(
-                alarm_configuration,
+                self._configuration,
                 bootstrap_servers=[kafka_url],
                 enable_auto_commit=False,
                 key_deserializer=lambda x: x.decode('utf-8')
@@ -87,6 +86,7 @@ class Connection(PyDMConnection):
 
     def _monitor(self, delay=0.1):
         for message in self.consumer:
+            print(message)
             if self._exit_event.is_set():
                 break
 
@@ -95,7 +95,18 @@ class Connection(PyDMConnection):
                 self.send_new_severity(value["severity"])
 
                 if value.get("message"):
-                    self.send_new_value(value["message"])
+                    self.send_new_value(message.value.decode("utf-8"))
+
+            if message.key == "config:/{}".format(self.address):
+                value = json.loads(message.value.decode("utf-8"))
+                
+                if value.get("enabled"):
+                    self.send_new_enable(value["enabled"])
+
+                else:
+                    self.send_new_enable("true")
+
+
 
     def close(self):
         self._exit_event.set()
@@ -104,6 +115,14 @@ class Connection(PyDMConnection):
 
     def send_new_value(self, value):
         self.new_value_signal[str].emit(value)
+
+    def send_new_enable(self, value):
+        enabled=True
+
+        if value == "false":
+            enabled = False
+            
+        self.new_new_enable[bool].emit(value)
 
     def send_new_severity(self, value):
         self.new_severity_signal.emit(ALARMS[value])
@@ -115,6 +134,7 @@ class Connection(PyDMConnection):
         super(Connection, self).add_listener(channel)
         self.send_connection_state(conn=True)
         channel.value_signal[bool].connect(self.put_value, Qt.QueuedConnection)
+        channel.enable_signal[bool].connect(self.put_enable, Qt.QueuedConnection)
 
     def acknowledge(self):
         self.producer.send(self._configuration, key = "command:/{}".format(self.address), value={"user": "pydm", "host": "", "command": "acknowledge"})
@@ -122,14 +142,24 @@ class Connection(PyDMConnection):
     def unacknowledge(self):
         self.producer.send(self._configuration, key = "command:/{}".format(self.address), value={"user": "pydm", "host": "", "command": "unacknowledge"})
 
-    def disable(self):
-        pass
-
     def put_value(self, value):
         if value:
             self.acknowledge()
         else:
             self.unacknowledge()
+
+    def put_enable(self, value):
+        if value:
+            self.enable()
+        else:
+            self.disable()
+
+    def enable(self):
+        self.producer.send(self._configuration, key = "config:/{}".format(self.address), value={"user": "pydm", "host": "", "enabled": "true"})
+    
+    def disable(self):
+        pvname = self.address.split("/")[-1]
+        self.producer.send(self._configuration, key = "config:/{}".format(self.address), value={"user": "pydm", "host": "", "description":pvname, "enabled": "false"})
 
 
 
